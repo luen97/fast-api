@@ -4,6 +4,7 @@ from uuid import UUID
 from datetime import (
     date, datetime)
 from typing import Optional, List
+import json
 
 # Pydantic
 from pydantic import (
@@ -13,7 +14,7 @@ from pydantic import (
 
 
 # FastAPI
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Body
 
 app = FastAPI()
 
@@ -22,14 +23,11 @@ app = FastAPI()
 
 class UserBase(BaseModel):
     user_id: UUID = Field(...)
-    email: EmailStr = Field(...)
-
-class UserLogin(UserBase):
-    password: str = Field(
+    email: EmailStr = Field(
         ...,
-        min_length=8,
-        max_length=64
-    )
+        example="manuel@gmail.com"
+        )
+    
 
 class User(UserBase):
 
@@ -61,7 +59,42 @@ class User(UserBase):
         else:
             return v
 
-class Tweet():
+# class UserLogin(UserBase):
+#     password: str = Field(
+#         ...,
+#         min_length=8,
+#         max_length=64
+#     )
+
+# class UserRegister(User):
+    # password: str = Field(
+    #     ...,
+    #     min_length=8,
+    #     max_length=64
+    # )
+
+# Otra manera de meter passwrd sin repetir ese atributo y sus validaciones
+
+# Creamos una clase passwd
+
+class PasswordMixin(BaseModel):   # Creamos este nuevo modelo
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        example='password'
+    )
+
+class UserLogin(PasswordMixin, UserBase):  # Utilizamos la herencia de clases para añadir password aquí.
+    pass
+
+class UserRegister(PasswordMixin, User):  # Utilizamos la herencia de clases para añadir password aquí.
+    pass
+
+
+
+
+class Tweet(BaseModel):
     tweet_id: UUID = Field(...)
     content: str = Field(
         ...,
@@ -78,6 +111,7 @@ class Tweet():
 ## Users
 
 ### Register a user
+
 @app.post(
     path="/signup",
     response_model=User,
@@ -85,9 +119,35 @@ class Tweet():
     summary="Register a User",
     tags=["Users"]
     )
-def signup():
-    pass
+def signup(user: UserRegister = Body(...)):
+    """
+    Signup
 
+    Register a user in the app
+
+    Parameters:
+        - Request body parameter
+            - user: UserRegister
+
+    Returns a json with the basic user info:
+        - user_id: UUID
+        - email: EmailStr
+        - first_name: str
+        - las_name: str
+        - birth_day: str
+    """
+    with open("users.json", "r+", encoding="utf-8") as f:
+        # results = json.loads(f.read()) # loads (load string), mejor usamos el otro metodo
+        results = json.load(f) # Leemos y guardamos ell file en results
+        user_dict = user.dict() # Pasamos el Body obj (param de la func) a dict   
+        user_dict["user_id"] = str(user_dict["user_id"])
+        user_dict["birth_date"] = str(user_dict["birth_date"])
+
+        results.append(user_dict)
+        f.seek(0)
+        json.dump(results,f)
+    return user
+    
 
 ### Login a user
 @app.post(
@@ -164,7 +224,7 @@ def home():
 
 ### Post a tweet
 @app.post(
-    path="/signup",
+    path="/post",
     response_model=Tweet,
     status_code=status.HTTP_201_CREATED,
     summary="Post a tweet",
@@ -208,3 +268,6 @@ def delete_a_tweet():
     )
 def update_a_tweet():
     pass
+
+
+
