@@ -136,6 +136,7 @@ def signup(user: UserRegister = Body(...)):
         - las_name: str
         - birth_day: str
     """
+    ## r+ es lectura y escritura
     with open("users.json", "r+", encoding="utf-8") as f:
         # results = json.loads(f.read()) # loads (load string), mejor usamos el otro metodo
         results = json.load(f) # Leemos y guardamos ell file en results
@@ -170,7 +171,23 @@ def login():
     tags=["Users"]
     )
 def show_all_users():
-    pass
+    """
+    Shows all users in the app
+
+    Parameters:
+        - 
+    
+    Returns a json list with all the user in the app with the following keys
+        - user_id: UUID
+        - email: EmailStr
+        - first_name: str
+        - las_name: str
+        - birth_day: str
+    """
+    with open("users.json", "r", encoding="utf-8") as f:
+        results = json.load(f)
+        return results
+
 
 ### Show a user
 @app.get(
