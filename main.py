@@ -5,6 +5,7 @@ from datetime import (
     date, datetime)
 from typing import Optional, List
 import json
+import os
 
 # Pydantic
 from pydantic import (
@@ -12,14 +13,23 @@ from pydantic import (
     validator
 )
 
+## Files
+
+USERS_FILE_NAME = 'users.json'
+USERS_DB = os.path.join(os.path.dirname(__file__), USERS_FILE_NAME)
+
+TWEETS_FILE_NAME = 'tweets.json'
+TWEETS_DB = os.path.join(os.path.dirname(__file__), TWEETS_FILE_NAME)
+
 
 # FastAPI
-from fastapi import FastAPI, status, Body
+from fastapi import FastAPI, status, Body, Path
 
 app = FastAPI()
 
 
 # Models
+
 
 class UserBase(BaseModel):
     user_id: UUID = Field(...)
@@ -137,7 +147,7 @@ def signup(user: UserRegister = Body(...)):
         - birth_day: str
     """
     ## r+ es lectura y escritura
-    with open("users.json", "r+", encoding="utf-8") as f:
+    with open(USERS_DB, "r+", encoding="utf-8") as f:
         # results = json.loads(f.read()) # loads (load string), mejor usamos el otro metodo
         results = json.load(f) # Leemos y guardamos ell file en results
         user_dict = user.dict() # Pasamos el Body obj (param de la func) a dict   
@@ -184,7 +194,7 @@ def show_all_users():
         - las_name: str
         - birth_day: str
     """
-    with open("users.json", "r", encoding="utf-8") as f:
+    with open(USERS_DB, "r", encoding="utf-8") as f:
         results = json.load(f)
         return results
 
@@ -197,8 +207,36 @@ def show_all_users():
     summary="Show a User",
     tags=["Users"]
     )
-def show_a_user():
-    pass
+def show_a_user(
+    user_id: UUID = Path(
+        ...,
+        title="user id",
+        description="This is the user id. It's a UUID",
+        example="3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        )
+):
+    """
+    Show a user
+
+    Shows a user in the app
+
+    Parameters:
+        - user_id: UUID
+    
+    Returns a json list with the user in the app with the following keys
+        - user_id: UUID
+        - email: EmailStr
+        - first_name: str
+        - las_name: str
+        - birth_day: str
+    """
+    users = show_all_users()
+
+    user = [user for user in users if user["user_id"] == str(user_id)]
+    
+    # FastAPI es capaz de convertir el dict (user[0]) al response model User, no hay
+    # necesidad de instanciar de nuevo la clase con User(**user[0])
+    return user[0] # User(**user[0])
 
 
 ### Delete a user
@@ -209,8 +247,44 @@ def show_a_user():
     summary="Delete a User",
     tags=["Users"]
     )
-def delete_a_user():
-    pass
+def delete_a_user(
+        user_id: UUID = Path(
+        ...,
+        title="user id",
+        description="This is the user id. It's a UUID",
+        example="3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        )
+):
+    """
+    Delete a user
+
+    Delete a user in the app
+
+    Parameters:
+        - user_id: UUID
+    
+    Returns a json list with the deleted user in the app with the following keys
+        - user_id: UUID
+        - email: EmailStr
+        - first_name: str
+        - las_name: str
+        - birth_day: str
+    """
+    users = show_all_users()
+
+    user_to_delete = [user for user in users if user["user_id"] == str(user_id)][0]
+
+    users.remove(user_to_delete)
+
+    with open(USERS_DB, "w", encoding="utf-8") as f:
+        # Funcionó sin la necesidad de convertir uuid y fechas a strings
+        # pues estas nunca dejaron de serlo, users que viene de show_all_users
+        # devuelve el json en str, esa conversión toca hacerla cuando recibimos
+        # el user con instancia de User (cuando entra como un body y le hacemos
+        # user.dict())
+        json.dump(users,f)
+
+    return user_to_delete
 
 
 ### Update a user
@@ -221,7 +295,15 @@ def delete_a_user():
     summary="Update a User",
     tags=["Users"]
     )
-def update_a_user():
+def update_a_user(
+    user_id: UUID = Path(
+        ...,
+        title="user id",
+        description="This is the user id. It's a UUID",
+        example="3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        ),
+    user: UserRegister = Body(...)
+):
     pass
 
 
@@ -265,12 +347,12 @@ def post(tweet: Tweet = Body(...)):
         - by: User
     """
     ## r+ es lectura y escritura
-    with open("tweets.json", "r+", encoding="utf-8") as f:
+    with open(TWEETS_DB, "r+", encoding="utf-8") as f:
         # results = json.loads(f.read()) # loads (load string), mejor usamos el otro metodo
         results = json.load(f) # Leemos y guardamos ell file en results
         tweet_dict = tweet.dict() # Pasamos el Body obj (param de la func) a dict   
 
-        ## Con el param default nos ahorramos toda esta conversión a strings
+        ## Con el param default de json.dump nos ahorramos toda esta conversión a strings
         # tweet_dict["tweet_id"] = str(tweet_dict["tweet_id"])
         # tweet_dict["created_at"] = str(tweet_dict["created_at"])
 
