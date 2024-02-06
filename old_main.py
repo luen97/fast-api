@@ -1,7 +1,6 @@
 
 # Python
-from uuid import (
-    UUID, uuid4)
+from uuid import UUID
 from datetime import (
     date, datetime)
 from typing import Optional, List
@@ -14,11 +13,6 @@ from pydantic import (
     validator
 )
 
-# FastAPI
-from fastapi import (
-    FastAPI, status, Body, Path,
-    HTTPException)
-
 ## Files
 
 USERS_FILE_NAME = 'users.json'
@@ -28,7 +22,8 @@ TWEETS_FILE_NAME = 'tweets.json'
 TWEETS_DB = os.path.join(os.path.dirname(__file__), TWEETS_FILE_NAME)
 
 
-
+# FastAPI
+from fastapi import FastAPI, status, Body, Path
 
 app = FastAPI()
 
@@ -36,42 +31,34 @@ app = FastAPI()
 # Models
 
 
-class IDMixin(BaseModel):
-    id: UUID =  Field(..., title='User ID')
-
-
-class TimeStampsMixin(BaseModel):
-    created_at: datetime = Field(default=datetime.now(),
-                                title='Creation date',
-                                example='2020-01-01T00:00:00Z',)
-
-    updated_at: Optional[datetime] = Field(default=None,
-                                           title='Last update date',
-                                           example='2020-01-01T00:00:00Z',)
-
-
 class UserBase(BaseModel):
+    user_id: UUID = Field(...)
+    email: EmailStr = Field(
+        ...,
+        example="manuel@gmail.com"
+        )
+    
 
-    email: EmailStr = Field(...,)
+class User(UserBase):
 
-## Clase auxiliar para crear User y UserRegister
-class UserProfile(UserBase):
-    first_name: str = Field(...,
-                            title='First name',
-                            min_length=2,
-                            max_length=50,
-                            example='Juancho',)
-
-    last_name: str = Field(...,
-                           title='Last name',
-                           min_length=2,
-                           max_length=50,
-                           example='Juan',)
-
-    birth_date: Optional[date] = Field(default=None,
-                                       title='Birth date',
-                                       example='2021-01-01',)
-
+    first_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        example="Emilio"
+    )
+    last_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        example="Contentillo"
+    )
+    birth_date: Optional[date] = Field(
+        default=None,
+        example="1994-11-04"
+    )
+    # Decorador de pydantic para hacer validaciones personalizadas
+    # https://pydantic-docs.helpmanual.io/usage/validators/
     @validator('birth_date')  
     def is_over_eighteen(cls, v):
         todays_date = date.today()
@@ -82,48 +69,51 @@ class UserProfile(UserBase):
         else:
             return v
 
-# Para creación completa de usuario (fechas y ID son generadas
-# por el programa, no se le piden al usuario) y visualizaciones
-class User(IDMixin, UserProfile, TimeStampsMixin, UserBase):
+# class UserLogin(UserBase):
+#     password: str = Field(
+#         ...,
+#         min_length=8,
+#         max_length=64
+#     )
+
+# class UserRegister(User):
+    # password: str = Field(
+    #     ...,
+    #     min_length=8,
+    #     max_length=64
+    # )
+
+# Otra manera de meter passwrd sin repetir ese atributo y sus validaciones
+
+# Creamos una clase passwd
+
+class PasswordMixin(BaseModel):   # Creamos este nuevo modelo
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        example='password'
+    )
+
+class UserLogin(PasswordMixin, UserBase):  # Utilizamos la herencia de clases para añadir password aquí.
+    pass
+
+class UserRegister(PasswordMixin, User):  # Utilizamos la herencia de clases para añadir password aquí.
     pass
 
 
-class PasswordMixin(BaseModel):
-    password: str = Field(...,
-                          min_length=8,
-                          max_length=64,
-                          example='password',)
 
 
-class UserLogin(PasswordMixin, UserBase):
-    pass
-
-# Para el registro de usuario, se piden datos personales
-# y contraseña
-class UserRegister(PasswordMixin, UserProfile):
-    pass
-
-
-class BaseTweet(BaseModel):
-    content: str = Field(...,
-                        min_length=1,
-                        max_length=256,)
-
-
-# Para creación completa de tweets (fechas, ID y user data
-# son generadas por el programa, no se le piden al usuario)
-# y visualizaciones
-class Tweet(IDMixin, TimeStampsMixin, BaseTweet):
-
-    created_by: User = Field(...,
-                             title='User who created the tweet',)
-
-# Para el registro de tweets, se piden datos del tweet (id del
-# creador y contenido)
-class RegisterTweet(BaseTweet):
-
-    created_by: str = Field(...,
-                            title='ID of the user who created the tweet',)
+class Tweet(BaseModel):
+    tweet_id: UUID = Field(...)
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=256
+    )
+    created_at: datetime = Field(default=datetime.now())
+    updated_at: Optional[datetime] = Field(default=None)
+    by: User = Field(...)
 
 
 # Path Operations
@@ -156,38 +146,24 @@ def signup(user: UserRegister = Body(...)):
         - las_name: str
         - birth_day: str
     """
-    user_dict = user.dict()
-    user_dict["id"] = str(uuid4())
-    user_dict["created_at"] = str(datetime.now())
-    user_dict["updated_at"] = None
+    ## r+ es lectura y escritura
+    with open(USERS_DB, "r+", encoding="utf-8") as f:
+        # results = json.loads(f.read()) # loads (load string), mejor usamos el otro metodo
+        results = json.load(f) # Leemos y guardamos ell file en results
+        user_dict = user.dict() # Pasamos el Body obj (param de la func) a dict   
+        user_dict["user_id"] = str(user_dict["user_id"])
+        user_dict["birth_date"] = str(user_dict["birth_date"])
 
-    if os.path.exists(USERS_DB):
-
-        with open(USERS_DB, "r+", encoding="utf-8") as f:
-
-            try:
-                results = json.load(f)
-            except json.JSONDecodeError:
-                results = []
-
-            results.append(user_dict)
-
-            f.seek(0)
-            json.dump(results,f, default=str, indent=4)
-
-        return user_dict
-
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="File doesn't exist"
-    )
+        results.append(user_dict)
+        f.seek(0)
+        json.dump(results,f)
+    return user
     
 
 ### Login a user
 @app.post(
     path="/login",
-    response_model=UserLogin,
+    response_model=User,
     status_code=status.HTTP_200_OK,
     summary="Login a User",
     tags=["Users"]
